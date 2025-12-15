@@ -98,7 +98,7 @@
 <body>
 
     <div id="loading-overlay">
-        <div id="loading-text" class="loader-text">ĐANG TẢI ẢNH... 0%</div>
+        <div id="loading-text" class="loader-text">CHỜ XÍU... 0%</div>
         <div class="loader-bar-bg">
             <div id="loading-bar" class="loader-bar-fill"></div>
         </div>
@@ -134,12 +134,12 @@
         loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
             const progress = (itemsLoaded / itemsTotal) * 100;
             loadingBar.style.width = progress + '%';
-            loadingText.innerText = `ĐANG TẢI... ${Math.round(progress)}%`;
+            loadingText.innerText = `CHỜ XÍU... ${Math.round(progress)}%`;
         };
 
         loadingManager.onLoad = function () {
             loadingBar.style.width = '100%';
-            loadingText.innerHTML = "SẴN SÀNG! <br><span class='blink'>CHẠM ĐỂ QUẨY</span>";
+            loadingText.innerHTML = "OK CHƯA! <br><span class='blink'>NHẤN CÁI ĐI</span>";
             loadingText.style.cursor = "pointer";
             overlay.addEventListener('click', startExperience);
             overlay.addEventListener('touchstart', startExperience);
