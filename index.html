@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Crazy Squad - Funky Party Zoom</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -11,51 +11,59 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #110518; font-family: 'Verdana', sans-serif; }
+        /* Chặn zoom và cuộn trang trên mobile */
+        body { margin: 0; overflow: hidden; background-color: #110518; font-family: 'Verdana', sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
         #canvas-container { width: 100%; height: 100vh; display: block; }
         
+        /* --- LOADING SCREEN --- */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 0.5s;
+        }
+        
+        .loader-text {
+            color: #00FFFF; font-size: 24px; font-weight: bold; text-transform: uppercase;
+            text-shadow: 0 0 10px #00FFFF; margin-bottom: 20px;
+            font-family: 'Courier New', monospace; text-align: center;
+        }
+
+        .loader-bar-bg {
+            width: 300px; max-width: 80%; height: 10px; background: #333; border: 2px solid #FF00CC;
+            border-radius: 5px; overflow: hidden;
+        }
+
+        .loader-bar-fill {
+            width: 0%; height: 100%; background: linear-gradient(90deg, #FF00CC, #FFFF00);
+            transition: width 0.2s;
+        }
+
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
         /* UI Layer */
         #ui-layer {
             position: absolute; bottom: 30px; width: 100%;
             text-align: center; pointer-events: none; z-index: 100;
+            opacity: 0; transition: opacity 1s;
+            display: flex; justify-content: center;
         }
         
-        /* Guide text - Funky Style */
         .guide { 
-            color: #FF00FF; 
-            font-size: 13px; 
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 25px; 
-            text-shadow: 2px 2px 0px #00FFFF;
-            background: rgba(0,0,0,0.7);
-            display: inline-block;
-            padding: 12px 25px;
-            border-radius: 50px;
-            border: 2px solid #FFFF00;
-            transform: rotate(-2deg);
+            color: #FF00FF; font-size: 13px; font-weight: bold; text-transform: uppercase;
+            text-shadow: 2px 2px 0px #00FFFF; background: rgba(0,0,0,0.7);
+            display: inline-block; padding: 12px 25px; border-radius: 50px;
+            border: 2px solid #FFFF00; transform: rotate(-2deg);
+            white-space: nowrap;
         }
 
-        button {
-            pointer-events: auto; cursor: pointer;
-            background: linear-gradient(45deg, #FF00CC, #3333FF); 
-            color: #FFFF00; border: 3px solid #FFFF00;
-            padding: 15px 40px; border-radius: 10px; 
-            font-weight: 900; font-size: 18px;
-            box-shadow: 5px 5px 0px #00FFFF;
-            text-transform: uppercase;
-            font-style: italic;
-            transition: transform 0.1s;
-        }
-        button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #00FFFF; }
-
-        /* Camera Preview */
         #camera-preview {
             position: absolute; bottom: 15px; right: 15px;
             width: 320px; height: 190px;
             border: 3px solid #FF00CC; 
-            transform: scaleX(-1); opacity: 0.8; border-radius: 10px;
-            box-shadow: 0 0 15px #FF00CC;
+            transform: scaleX(-1); opacity: 0; border-radius: 10px;
+            box-shadow: 0 0 15px #FF00CC; transition: opacity 1s;
         }
         
         #copyright {
@@ -63,44 +71,87 @@
             color: rgba(255, 255, 255, 0.3); font-size: 10px;
             z-index: 100; font-family: monospace; pointer-events: none;
         }
+
+        /* --- RESPONSIVE MOBILE --- */
+        @media (max-width: 768px) {
+            /* Ẩn camera preview trên mobile */
+            #camera-preview { display: none !important; }
+            
+            /* Điều chỉnh text hướng dẫn */
+            .guide {
+                font-size: 10px;
+                padding: 10px 15px;
+                white-space: normal; /* Cho phép xuống dòng */
+                width: 85%; /* Giới hạn chiều rộng */
+                line-height: 1.6;
+            }
+
+            /* Điều chỉnh text loading */
+            .loader-text { font-size: 18px; }
+            
+            /* Dời copyright ra giữa hoặc ẩn bớt nếu cần */
+            #copyright { left: 0; width: 100%; text-align: center; bottom: 5px; }
+            #ui-layer { bottom: 40px; }
+        }
     </style>
 </head>
 <body>
+
+    <div id="loading-overlay">
+        <div id="loading-text" class="loader-text">ĐANG TẢI ẢNH... 0%</div>
+        <div class="loader-bar-bg">
+            <div id="loading-bar" class="loader-bar-fill"></div>
+        </div>
+    </div>
+
     <div id="ui-layer">
         <div class="guide">
-            ✊ <b>Nắm:</b> Quẩy &nbsp;|&nbsp; 
-            🖐 <b>Xòe:</b> Chọn Ảnh &nbsp;|&nbsp; 
-            👌 <b>OK:</b> Zoom Ảnh &nbsp;|&nbsp; 
+            ✊ <b>Nắm:</b> Quẩy <span class="sep">|</span> 
+            🖐 <b>Xòe:</b> Chọn Ảnh <span class="sep">|</span> 
+            ✌️ <b>Hi:</b> Zoom Ảnh <span class="sep">|</span> 
             🫶 <b>Tim:</b> Besties
         </div>
-        <br>
-        <button id="btnStart" onclick="startSystem()">START PARTY! 🎉</button>
     </div>
 
     <div id="copyright"> Remix by Ku Pha</div>
     <div id="canvas-container"></div>
-    <video class="input_video" style="display:none"></video>
+    <video class="input_video" style="display:none" playsinline></video>
     <canvas id="camera-preview"></canvas>
 
     <script>
         // ==========================================
-        // 1. CONFIG & RESOURCES
+        // 1. CONFIG & LOADING MANAGER
         // ==========================================
         const MUSIC_URL = "./gao1.mp3"; 
-        let bgMusic = new Audio(MUSIC_URL);
-        bgMusic.loop = true; bgMusic.volume = 1.0;
-
-        const loader = new THREE.TextureLoader();
-       const photoFiles = ['./tan.jpg', './len.jpg', './tri.jpg', './khoa.jpg', './son.jpg','./tien.jpg'];
-        const photoTextures = [];
         
+        const loadingManager = new THREE.LoadingManager();
+        const loadingText = document.getElementById('loading-text');
+        const loadingBar = document.getElementById('loading-bar');
+        const overlay = document.getElementById('loading-overlay');
+        
+        let isSystemStarted = false;
+
+        loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+            const progress = (itemsLoaded / itemsTotal) * 100;
+            loadingBar.style.width = progress + '%';
+            loadingText.innerText = `ĐANG TẢI... ${Math.round(progress)}%`;
+        };
+
+        loadingManager.onLoad = function () {
+            loadingBar.style.width = '100%';
+            loadingText.innerHTML = "SẴN SÀNG! <br><span class='blink'>CHẠM ĐỂ QUẨY</span>";
+            loadingText.style.cursor = "pointer";
+            overlay.addEventListener('click', startExperience);
+            overlay.addEventListener('touchstart', startExperience);
+        };
+
+        const loader = new THREE.TextureLoader(loadingManager);
+        const photoFiles = ['./tan.jpg', './len.jpg', './tri.jpg', './khoa.jpg', './son.jpg','./tien.jpg'];
+        const photoTextures = [];
         photoFiles.forEach((f, i) => {
-            photoTextures[i] = loader.load(f, undefined, undefined, (err) => {
-                console.warn("Could not load image, using fallback", f);
-            });
+            photoTextures[i] = loader.load(f, undefined, undefined, (err) => console.warn("Lỗi load ảnh:", f));
         });
 
-        // Tạo Texture Confetti
         function createConfettiTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 64; canvas.height = 64;
@@ -114,80 +165,97 @@
             ctx.fill();
             return new THREE.CanvasTexture(canvas);
         }
-
         const textureConfetti = createConfettiTexture();
+
+        let bgMusic = new Audio(MUSIC_URL);
+        bgMusic.loop = true; bgMusic.volume = 1.0; bgMusic.preload = 'auto';
 
         // ==========================================
         // 2. SYSTEM CONFIG
         // ==========================================
         const CONFIG = {
-            count: 3500,          
-            explodeRadius: 90,    
-            discoRadius: 35,       
-            carouselRadius: 45
+            count: 3500, explodeRadius: 90, discoRadius: 35, carouselRadius: 45
         };
 
         let scene, camera, renderer;
-        let particleSystem;
-        let photoGroup; 
-        let zoomMesh; // Mesh riêng dùng để Zoom ảnh
-        let titleMesh, loveMesh;
-        
-        // Trạng thái: 'DISCO', 'GALLERY', 'ZOOM', 'BESTIES'
+        let particleSystem, photoGroup, zoomMesh, titleMesh, loveMesh;
         let state = 'DISCO'; 
         let handX = 0.5; 
-        let bestIdx = 0; // Index ảnh đang ở vị trí đẹp nhất để zoom
+        let bestIdx = 0; 
 
         // ==========================================
-        // 3. THREE.JS SETUP
+        // 3. START FUNCTION
+        // ==========================================
+        function startExperience() {
+            if(isSystemStarted) return;
+            isSystemStarted = true;
+            overlay.style.opacity = 0;
+            setTimeout(() => { overlay.style.display = 'none'; }, 500);
+            document.getElementById('ui-layer').style.opacity = 1;
+            
+            // Chỉ hiện preview nếu không phải mobile
+            if (window.innerWidth > 768) {
+                document.getElementById('camera-preview').style.opacity = 0.8;
+            }
+
+            bgMusic.play().catch(e => console.log(e));
+            init3D();
+            startCamera();
+        }
+
+        // ==========================================
+        // 4. THREE.JS SETUP
         // ==========================================
         function init3D() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
             scene.fog = new THREE.FogExp2(0x110518, 0.002);
-
+            
             camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.z = 130;
+            
+            // RESPONSIVE CAMERA: Nếu màn hình dọc (điện thoại), lùi camera ra xa hơn
+            adjustCameraPosition();
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             container.appendChild(renderer.domElement);
-
+            
             particleSystem = createFunkyParticles(CONFIG.count);
             createPhotoCarousel();
-            createZoomMesh(); // Tạo mesh zoom riêng
+            createZoomMesh(); 
             createFunkyTexts();
-            
             animate();
         }
 
-        function createFunkyParticles(count) {
-            const pPositions = [];
-            const pDiscoTargets = []; 
-            const pExplodeTargets = [];
-            const pHeartTargets = [];
-            const sizes = [];
-            const randomness = [];
-            const colors = [];
+        function adjustCameraPosition() {
+            if (!camera) return;
+            const aspect = window.innerWidth / window.innerHeight;
+            if (aspect < 1) {
+                // Mobile Portrait: Lùi xa để thấy hết vòng tròn
+                camera.position.z = 190; 
+            } else {
+                // Desktop Landscape
+                camera.position.z = 130;
+            }
+        }
 
+        function createFunkyParticles(count) {
+            const pPositions = [], pDiscoTargets = [], pExplodeTargets = [], pHeartTargets = [], sizes = [], randomness = [], colors = [];
             const palette = [new THREE.Color('#FF00CC'), new THREE.Color('#FFFF00'), new THREE.Color('#00FFFF'), new THREE.Color('#33FF00'), new THREE.Color('#FF3300')];
             
             for(let i=0; i<count; i++) {
-                // DISCO
                 const phi = Math.acos(1 - 2 * (i + 0.5) / count);
                 const theta = Math.PI * (1 + Math.sqrt(5)) * i;
                 const rD = CONFIG.discoRadius + (Math.random() - 0.5) * 2;
                 pDiscoTargets.push(rD * Math.sin(phi) * Math.cos(theta), rD * Math.sin(phi) * Math.sin(theta), rD * Math.cos(phi));
 
-                // EXPLODE
                 const u = Math.random(); const v = Math.random();
                 const thetaE = 2 * Math.PI * u;
                 const phiE = Math.acos(2 * v - 1);
                 const rE = CONFIG.explodeRadius * (0.5 + Math.random() * 0.8);
                 pExplodeTargets.push(rE * Math.sin(phiE) * Math.cos(thetaE), rE * Math.sin(phiE) * Math.sin(thetaE), rE * Math.cos(phiE));
 
-                // HEART
                 const tH = Math.random() * Math.PI * 2;
                 let hx = 16 * Math.pow(Math.sin(tH), 3);
                 let hy = 13 * Math.cos(tH) - 5 * Math.cos(2*tH) - 2 * Math.cos(3*tH) - Math.cos(4*tH);
@@ -201,12 +269,10 @@
                 const c = palette[Math.floor(Math.random() * palette.length)];
                 colors.push(c.r, c.g, c.b);
             }
-
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.Float32BufferAttribute(pPositions, 3));
             geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
             geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
-            
             geo.userData = { disco: pDiscoTargets, explode: pExplodeTargets, heart: pHeartTargets, randomness: randomness };
             const mat = new THREE.PointsMaterial({ size: 3, vertexColors: true, map: textureConfetti, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
             const points = new THREE.Points(geo, mat);
@@ -221,14 +287,12 @@
             const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); 
             const total = photoFiles.length;
             const angleStep = (Math.PI * 2) / total;
-
             for(let i=0; i<total; i++) {
                 const container = new THREE.Group();
                 const angle = i * angleStep;
                 container.position.x = Math.sin(angle) * CONFIG.carouselRadius;
                 container.position.z = Math.cos(angle) * CONFIG.carouselRadius;
                 container.lookAt(0, 0, 0); container.rotateY(Math.PI); 
-
                 const mat = new THREE.MeshBasicMaterial({ map: photoTextures[i] || null, side: THREE.DoubleSide });
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.rotation.z = (Math.random() - 0.5) * 0.2;
@@ -242,23 +306,19 @@
             scene.add(photoGroup);
         }
 
-        // Tạo một Mesh riêng biệt cho chế độ Zoom để tránh rắc rối toạ độ khi xoay Group
         function createZoomMesh() {
             const geo = new THREE.PlaneGeometry(16, 12);
             const borderGeo = new THREE.PlaneGeometry(17, 13);
             const mat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide });
-            
             zoomMesh = new THREE.Mesh(geo, mat);
-            const border = new THREE.Mesh(borderGeo, new THREE.MeshBasicMaterial({color: 0x00FFFF})); // Viền Neon Cyan
+            const border = new THREE.Mesh(borderGeo, new THREE.MeshBasicMaterial({color: 0x00FFFF})); 
             border.position.z = -0.1;
             zoomMesh.add(border);
-            
             zoomMesh.visible = false;
             scene.add(zoomMesh);
         }
 
         function createFunkyTexts() {
-            // CRAZY SQUAD
             const tCanvas = document.createElement('canvas'); tCanvas.width = 1024; tCanvas.height = 256;
             const ctx = tCanvas.getContext('2d');
             ctx.font = '900 110px "Arial Black", sans-serif'; ctx.textAlign = 'center';
@@ -266,31 +326,23 @@
             ctx.fillStyle = grd; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4;
             ctx.shadowColor = "#000000"; ctx.shadowOffsetX = 8; ctx.shadowOffsetY = 8; ctx.shadowBlur = 0;
             ctx.strokeText("CRAZY SQUAD", 512, 150); ctx.fillText("CRAZY SQUAD", 512, 150);
-            
             const tMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(tCanvas), transparent: true });
             titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 15), tMat);
             titleMesh.position.set(0, 60, 0); scene.add(titleMesh);
 
-            // BESTIES
             const lCanvas = document.createElement('canvas'); lCanvas.width = 1024; lCanvas.height = 256;
             const lCtx = lCanvas.getContext('2d');
             lCtx.font = 'bold 100px "Courier New", monospace'; lCtx.fillStyle = '#FFFFFF'; lCtx.textAlign = 'center';
             lCtx.shadowColor = "#FF0000"; lCtx.shadowBlur = 0; lCtx.shadowOffsetX = 5; lCtx.shadowOffsetY=5;
             lCtx.fillText("Anh Em 4EVER 🤘", 512, 130);
-            
             const lMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(lCanvas), transparent: true });
             loveMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 15), lMat);
             loveMesh.position.set(0, 0, 40); loveMesh.visible = false; scene.add(loveMesh);
         }
 
-        // ==========================================
-        // 4. ANIMATION LOOP
-        // ==========================================
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
-
-            // --- A. PARTICLES ---
             const positions = particleSystem.geometry.attributes.position.array;
             const targetKey = (state === 'DISCO') ? 'disco' : (state === 'BESTIES' ? 'heart' : 'explode');
             const targets = particleSystem.geometry.userData[targetKey];
@@ -304,137 +356,117 @@
             }
             particleSystem.geometry.attributes.position.needsUpdate = true;
 
+            // Responsive scale cho Title trên mobile
+            const isMobile = window.innerWidth < 768;
+            const baseScale = isMobile ? 0.6 : 1.0;
+
             if (state === 'DISCO') {
                 particleSystem.rotation.y += 0.02;
                 particleSystem.rotation.z = Math.sin(time) * 0.2;
                 titleMesh.position.y = 60 + Math.sin(time * 8) * 2;
+                // Áp dụng scale
+                titleMesh.scale.lerp(new THREE.Vector3(baseScale, baseScale, 1), 0.1);
             } else if (state === 'GALLERY' || state === 'ZOOM') {
                 particleSystem.rotation.y += 0.005;
             }
 
-            // --- B. CAROUSEL & ZOOM ---
-            // 1. Logic GALLERY
             if (state === 'GALLERY') {
                 photoGroup.visible = true; zoomMesh.visible = false;
                 titleMesh.visible = false; loveMesh.visible = false;
                 
-                photoGroup.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
+                // Thu nhỏ cả cụm carousel một chút nếu là mobile
+                const groupTargetScale = isMobile ? 0.7 : 1.0;
+                photoGroup.scale.lerp(new THREE.Vector3(groupTargetScale, groupTargetScale, groupTargetScale), 0.1);
 
-                // Xoay Carousel
                 const rotRange = Math.PI * 4; 
                 const targetRot = (handX - 0.5) * rotRange; 
                 photoGroup.rotation.y += (targetRot - photoGroup.rotation.y) * 0.1;
 
-                // Tìm ảnh gần camera nhất để chuẩn bị cho Zoom
                 let maxZ = -999;
                 photoGroup.children.forEach((container, idx) => {
                     const worldPos = new THREE.Vector3();
                     container.getWorldPosition(worldPos);
-                    
-                    // Hiệu ứng scale khi gần
                     let s = 1.0;
-                    if (worldPos.z > 20) {
-                        s = 1.0 + (worldPos.z - 20) / 30;
-                    }
+                    if (worldPos.z > 20) s = 1.0 + (worldPos.z - 20) / 30;
                     container.scale.lerp(new THREE.Vector3(s,s,s), 0.1);
-
-                    // Track Best Index
-                    if (worldPos.z > maxZ) {
-                        maxZ = worldPos.z;
-                        bestIdx = idx;
-                    }
-
-                    // Lazy load texture
+                    if (worldPos.z > maxZ) { maxZ = worldPos.z; bestIdx = idx; }
                     const mesh = container.children[0];
                     if (!mesh.material.map && photoTextures[idx]) {
                         mesh.material.map = photoTextures[idx]; mesh.material.needsUpdate = true;
                     }
                 });
             } 
-            // 2. Logic ZOOM
             else if (state === 'ZOOM') {
-                photoGroup.visible = false; // Ẩn carousel
-                zoomMesh.visible = true;    // Hiện mesh zoom
+                photoGroup.visible = false; zoomMesh.visible = true;    
                 titleMesh.visible = false; loveMesh.visible = false;
-
-                // Gán texture của ảnh đang chọn vào zoomMesh
                 if (photoTextures[bestIdx]) {
                     zoomMesh.material.map = photoTextures[bestIdx];
                     zoomMesh.material.needsUpdate = true;
                 }
-
-                // Hiệu ứng phóng to ra giữa
-                const bounce = 1.0 + Math.sin(time * 2) * 0.02; // Thở nhẹ
-                zoomMesh.scale.lerp(new THREE.Vector3(4 * bounce, 4 * bounce, 4), 0.1);
+                const bounce = 1.0 + Math.sin(time * 2) * 0.02; 
+                
+                // Zoom scale responsive
+                const zoomBase = isMobile ? 2.5 : 4.0;
+                zoomMesh.scale.lerp(new THREE.Vector3(zoomBase * bounce, zoomBase * bounce, zoomBase), 0.1);
+                
                 zoomMesh.position.lerp(new THREE.Vector3(0, 0, 80), 0.1);
-                zoomMesh.rotation.z = Math.sin(time) * 0.05; // Nghiêng nhẹ cho vui
+                zoomMesh.rotation.z = Math.sin(time) * 0.05; 
             }
-            // 3. Khác
             else {
                 photoGroup.visible = false; zoomMesh.visible = false;
                 photoGroup.scale.set(0,0,0);
             }
 
-            // --- C. UI ---
             if (state === 'DISCO') {
                 titleMesh.visible = true; loveMesh.visible = false;
-                titleMesh.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
             } else if (state === 'BESTIES') {
                 titleMesh.visible = false; loveMesh.visible = true;
-                const beat = 1 + Math.abs(Math.sin(time * 6)) * 0.2;
+                const beat = (1 + Math.abs(Math.sin(time * 6)) * 0.2) * baseScale;
                 loveMesh.scale.set(beat, beat, 1);
             }
-
             renderer.render(scene, camera);
         }
 
         // ==========================================
-        // 5. MEDIA PIPE
+        // 5. LOGIC NHẬN DIỆN TAY (HI / NẮM / XÒE)
         // ==========================================
-        function startSystem() {
-            document.getElementById('btnStart').style.display = 'none';
-            bgMusic.play().catch(e => console.log(e));
-            init3D();
-
+        function startCamera() {
             const video = document.getElementsByClassName('input_video')[0];
             const canvas = document.getElementById('camera-preview');
             const ctx = canvas.getContext('2d');
-            
             const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
             hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
             hands.onResults(results => {
-                ctx.save(); ctx.clearRect(0,0,canvas.width, canvas.height);
-                ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
-                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height); ctx.restore();
+                // Vẽ nếu không bị ẩn (trên desktop)
+                if (window.innerWidth > 768) {
+                    ctx.save(); ctx.clearRect(0,0,canvas.width, canvas.height);
+                    ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+                    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height); ctx.restore();
+                }
 
-                // 2 Tay -> Besties
                 if (results.multiHandLandmarks.length === 2) {
                     const h1 = results.multiHandLandmarks[0]; const h2 = results.multiHandLandmarks[1];
                     const dist = Math.hypot(h1[8].x - h2[8].x, h1[8].y - h2[8].y);
                     if (dist < 0.1) { state = 'BESTIES'; return; }
                 }
 
-                // 1 Tay -> Disco / Gallery / Zoom
                 if(results.multiHandLandmarks.length > 0) {
                     const lm = results.multiHandLandmarks[0];
                     handX = 1 - lm[9].x; 
+                    const wrist = lm[0];
+                    const dIndex = Math.hypot(lm[8].x - wrist.x, lm[8].y - wrist.y);
+                    const dMiddle = Math.hypot(lm[12].x - wrist.x, lm[12].y - wrist.y);
+                    const dRing = Math.hypot(lm[16].x - wrist.x, lm[16].y - wrist.y);
+                    const dPinky = Math.hypot(lm[20].x - wrist.x, lm[20].y - wrist.y);
 
-                    // Tính khoảng cách ngón tay
-                    const tips = [8,12,16,20]; const wrist = lm[0];
-                    let openDist = 0; tips.forEach(i => openDist += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
-                    const avgDist = openDist / 4;
-                    
-                    // Tính OK (Pinch: Ngón cái [4] chạm Ngón trỏ [8])
-                    const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+                    const isHi = (dIndex > 0.25 && dMiddle > 0.25 && dRing < 0.22 && dPinky < 0.22);
+                    const avgDist = (dIndex + dMiddle + dRing + dPinky) / 4;
+                    const isFist = (avgDist < 0.25);
 
-                    if (avgDist < 0.25) { 
-                        state = 'DISCO'; // Nắm tay
-                    } else if (pinchDist < 0.05) {
-                        state = 'ZOOM'; // OK Sign
-                    } else {
-                        state = 'GALLERY'; // Xòe tay
-                    }
+                    if (isHi) { state = 'ZOOM'; } 
+                    else if (isFist) { state = 'DISCO'; } 
+                    else { state = 'GALLERY'; }
                 } else {
                     state = 'DISCO';
                 }
@@ -447,7 +479,12 @@
         }
 
         window.addEventListener('resize', () => {
-            if(camera) { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+            if(camera) { 
+                camera.aspect = window.innerWidth/window.innerHeight; 
+                camera.updateProjectionMatrix(); 
+                adjustCameraPosition(); // Tự động chỉnh xa gần khi xoay màn hình
+                renderer.setSize(window.innerWidth, window.innerHeight); 
+            }
         });
     </script>
 </body>
